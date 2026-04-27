@@ -13,48 +13,30 @@ jobs:
         run: pip3 install lz4 pypng stringcase
       - name: Install ARM toolchain
         uses: numworks/setup-arm-toolchain@latest
-      - name: Build kernel.A.elf
-        run: make MODEL=n0110 kernel.A.elf
-      - name: Build userland.A.elf
-        run: make MODEL=n0110 userland.A.elf
-      - name: Build userland.B.elf
-        run: make MODEL=n0110 userland.B.elf
-      - name: Build kernel.B.elf
-        run: make MODEL=n0110 kernel.B.elf
-      - name: Locate ELF artifacts
-        id: locate
+      - name: Build kernel.A.elf and userland.A.elf
+        run: |
+          make MODEL=n0110 kernel.A.elf
+          make MODEL=n0110 userland.A.elf
+      - name: Build slot B (kernel.B.elf and userland.B.elf)
+        run: |
+          make MODEL=n0110 kernel.B.elf
+          make MODEL=n0110 userland.B.elf
+      - name: Pack DFU and collect artifacts
         run: |
           set -e
+          mkdir -p dist
           KA=$(find output -name 'kernel.A.elf' | head -1)
           UA=$(find output -name 'userland.A.elf' | head -1)
           KB=$(find output -name 'kernel.B.elf' | head -1)
           UB=$(find output -name 'userland.B.elf' | head -1)
-          echo "Kernel A: $KA"
-          echo "Userland A: $UA"
-          echo "Kernel B: $KB"
-          echo "Userland B: $UB"
-          test -n "$KA" && test -n "$UA"
-          echo "ka=$KA" >> $GITHUB_OUTPUT
-          echo "ua=$UA" >> $GITHUB_OUTPUT
-          echo "kb=$KB" >> $GITHUB_OUTPUT
-          echo "ub=$UB" >> $GITHUB_OUTPUT
-      - name: Pack DFU (slot A: kernel + userland)
-        run: |
-          mkdir -p dist
-          python3 build/device/elf2dfu.py -v -i ${{ steps.locate.outputs.ka }} ${{ steps.locate.outputs.ua }} -o dist/epsilon-18.2.0-n0110-slotA.dfu
-      - name: Pack DFU (slot B: kernel + userland)
-        if: ${{ steps.locate.outputs.kb != '' && steps.locate.outputs.ub != '' }}
-        run: |
-          python3 build/device/elf2dfu.py -v -i ${{ steps.locate.outputs.kb }} ${{ steps.locate.outputs.ub }} -o dist/epsilon-18.2.0-n0110-slotB.dfu
-      - name: List dist
-        run: ls -la dist/
+          echo "Slot A: $KA + $UA"
+          echo "Slot B: $KB + $UB"
+          python3 build/device/elf2dfu.py -v -i "$KA" "$UA" -o dist/epsilon-18.2.0-n0110-slotA.dfu
+          python3 build/device/elf2dfu.py -v -i "$KB" "$UB" -o dist/epsilon-18.2.0-n0110-slotB.dfu
+          cp "$KA" "$UA" "$KB" "$UB" dist/
+          ls -la dist/
       - uses: actions/upload-artifact@v4
         with:
           name: epsilon-18.2.0-n0110-dfu
-          path: |
-            dist/*.dfu
-            ${{ steps.locate.outputs.ka }}
-            ${{ steps.locate.outputs.ua }}
-            ${{ steps.locate.outputs.kb }}
-            ${{ steps.locate.outputs.ub }}
+          path: dist/
           if-no-files-found: error
