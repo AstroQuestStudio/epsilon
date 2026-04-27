@@ -1,0 +1,26 @@
+name: Build n0110 18.2.0
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y build-essential imagemagick libfreetype6-dev libjpeg-dev libpng-dev pkg-config
+      - name: Install python deps
+        run: pip3 install lz4 pypng stringcase
+      - name: Install ARM toolchain
+        uses: numworks/setup-arm-toolchain@latest
+      - name: Build epsilon.dfu (n0110)
+        run: make MODEL=n0110 epsilon.dfu
+      - name: Build epsilon.onboarding.dfu (n0110)
+        run: make MODEL=n0110 epsilon.onboarding.dfu
+      - uses: actions/upload-artifact@v4
+        with:
+          name: epsilon-n0110-18.2.0
+          path: |
+            output/release/device/n0110/epsilon.dfu
+            output/release/device/n0110/epsilon.onboarding.dfu
+          if-no-files-found: error
