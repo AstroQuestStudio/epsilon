@@ -7,22 +7,54 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y build-essential imagemagick libfreetype6-dev libjpeg-dev libpng-dev pkg-config
       - name: Install python deps
         run: pip3 install lz4 pypng stringcase
       - name: Install ARM toolchain
         uses: numworks/setup-arm-toolchain@latest
-      - name: Build epsilon.dfu (n0110)
-        run: make MODEL=n0110 epsilon.dfu
-      - name: Build epsilon.onboarding.dfu (n0110)
-        run: make MODEL=n0110 epsilon.onboarding.dfu
+      - name: Build kernel.A.elf
+        run: make MODEL=n0110 kernel.A.elf
+      - name: Build userland.A.elf
+        run: make MODEL=n0110 userland.A.elf
+      - name: Build userland.B.elf
+        run: make MODEL=n0110 userland.B.elf
+      - name: Build kernel.B.elf
+        run: make MODEL=n0110 kernel.B.elf
+      - name: Locate ELF artifacts
+        id: locate
+        run: |
+          set -e
+          KA=$(find output -name 'kernel.A.elf' | head -1)
+          UA=$(find output -name 'userland.A.elf' | head -1)
+          KB=$(find output -name 'kernel.B.elf' | head -1)
+          UB=$(find output -name 'userland.B.elf' | head -1)
+          echo "Kernel A: $KA"
+          echo "Userland A: $UA"
+          echo "Kernel B: $KB"
+          echo "Userland B: $UB"
+          test -n "$KA" && test -n "$UA"
+          echo "ka=$KA" >> $GITHUB_OUTPUT
+          echo "ua=$UA" >> $GITHUB_OUTPUT
+          echo "kb=$KB" >> $GITHUB_OUTPUT
+          echo "ub=$UB" >> $GITHUB_OUTPUT
+      - name: Pack DFU (slot A: kernel + userland)
+        run: |
+          mkdir -p dist
+          python3 build/device/elf2dfu.py -v -i ${{ steps.locate.outputs.ka }} ${{ steps.locate.outputs.ua }} -o dist/epsilon-18.2.0-n0110-slotA.dfu
+      - name: Pack DFU (slot B: kernel + userland)
+        if: ${{ steps.locate.outputs.kb != '' && steps.locate.outputs.ub != '' }}
+        run: |
+          python3 build/device/elf2dfu.py -v -i ${{ steps.locate.outputs.kb }} ${{ steps.locate.outputs.ub }} -o dist/epsilon-18.2.0-n0110-slotB.dfu
+      - name: List dist
+        run: ls -la dist/
       - uses: actions/upload-artifact@v4
         with:
-          name: epsilon-n0110-18.2.0
+          name: epsilon-18.2.0-n0110-dfu
           path: |
-            output/release/device/n0110/epsilon.dfu
-            output/release/device/n0110/epsilon.onboarding.dfu
+            dist/*.dfu
+            ${{ steps.locate.outputs.ka }}
+            ${{ steps.locate.outputs.ua }}
+            ${{ steps.locate.outputs.kb }}
+            ${{ steps.locate.outputs.ub }}
           if-no-files-found: error
